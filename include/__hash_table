@@ -900,6 +900,7 @@ public:
     }
 
     pair<iterator, bool> __node_insert_unique(__node_pointer __nd);
+    iterator             __node_insert_unique(iterator __p, __node_pointer __nd);
     iterator             __node_insert_multi(__node_pointer __nd);
     iterator             __node_insert_multi(const_iterator __p,
                                              __node_pointer __nd);
@@ -918,6 +919,8 @@ public:
 #ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
     template <class _Pp>
         pair<iterator, bool> __insert_unique(_Pp&& __x);
+    template <class _Pp>
+        pair<iterator, bool> __node_unique_index(_Pp&& __x);
 #endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 
 #ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
@@ -1656,6 +1659,44 @@ __done:
 
 template <class _Tp, class _Hash, class _Equal, class _Alloc>
 typename __hash_table<_Tp, _Hash, _Equal, _Alloc>::iterator
+__hash_table<_Tp, _Hash, _Equal, _Alloc>::__node_insert_unique(iterator __p, __node_pointer __nd)
+{
+    __nd->__hash_ = hash_function()(__nd->__value_);
+    size_type __bc = bucket_count();
+    size_t __chash;
+    _LIBCPP_ASSERT(__bc != 0, "__node_insert_unique() requires bucket_count > 0");
+    __chash = __constrain_hash(__nd->__hash_, __bc);
+
+    {
+        // insert_after __bucket_list_[__chash], or __first_node if bucket is null
+        __node_pointer __pn = __p.__node_;
+        if (__pn == nullptr)
+        {
+            __pn = static_cast<__node_pointer>(pointer_traits<__node_base_pointer>::pointer_to(__p1_.first()));
+            __nd->__next_ = __pn->__next_;
+            __pn->__next_ = __nd;
+            // fix up __bucket_list_
+            __bucket_list_[__chash] = __pn;
+            if (__nd->__next_ != nullptr)
+                __bucket_list_[__constrain_hash(__nd->__next_->__hash_, __bc)] = __nd;
+        }
+        else
+        {
+            __nd->__next_ = __pn->__next_;
+            __pn->__next_ = __nd;
+        }
+        // increment size
+        ++size();
+    }
+#if _LIBCPP_DEBUG_LEVEL >= 2
+    return iterator(__nd, this);
+#else
+    return iterator(__nd);
+#endif
+}
+
+template <class _Tp, class _Hash, class _Equal, class _Alloc>
+typename __hash_table<_Tp, _Hash, _Equal, _Alloc>::iterator
 __hash_table<_Tp, _Hash, _Equal, _Alloc>::__node_insert_multi(__node_pointer __cp)
 {
     __cp->__hash_ = hash_function()(__cp->__value_);
@@ -1865,11 +1906,59 @@ template <class _Pp>
 pair<typename __hash_table<_Tp, _Hash, _Equal, _Alloc>::iterator, bool>
 __hash_table<_Tp, _Hash, _Equal, _Alloc>::__insert_unique(_Pp&& __x)
 {
+    pair<iterator, bool> __l = __node_unique_index(_VSTD::forward<_Pp>(__x));
+    if (!__l.second)
+        return __l;
+
     __node_holder __h = __construct_node(_VSTD::forward<_Pp>(__x));
-    pair<iterator, bool> __r = __node_insert_unique(__h.get());
-    if (__r.second)
-        __h.release();
+    auto __r = pair<iterator, bool>(__node_insert_unique(__l.first, __h.get()), true);
+    __h.release();
     return __r;
+}
+
+template <class _Tp, class _Hash, class _Equal, class _Alloc>
+template <class _Pp>
+pair<typename __hash_table<_Tp, _Hash, _Equal, _Alloc>::iterator, bool>
+__hash_table<_Tp, _Hash, _Equal, _Alloc>::__node_unique_index(_Pp&& __x)
+{
+    size_t __hash = hash_function()(_VSTD::forward<_Pp>(__x));
+    size_type __bc = bucket_count();
+    bool __unique = false;
+    __node_pointer __ndptr;
+    size_t __chash;
+    if (__bc != 0)
+    {
+        __chash = __constrain_hash(__hash, __bc);
+        __ndptr = __bucket_list_[__chash];
+        if (__ndptr != nullptr)
+        {
+            for (__ndptr = __ndptr->__next_; __ndptr != nullptr &&
+                                             __constrain_hash(__ndptr->__hash_, __bc) == __chash;
+                                                     __ndptr = __ndptr->__next_)
+            {
+                if (key_eq()(__ndptr->__value_, _VSTD::forward<_Pp>(__x)))
+                    goto __done;
+            }
+        }
+    }
+    {
+        if (size()+1 > __bc * max_load_factor() || __bc == 0)
+        {
+            rehash(_VSTD::max<size_type>(2 * __bc + !__is_power2(__bc),
+                           size_type(ceil(float(size() + 1) / max_load_factor()))));
+            __bc = bucket_count();
+            __chash = __constrain_hash(__hash, __bc);
+        }
+        // insert_after __bucket_list_[__chash], or __first_node if bucket is null
+        __ndptr = __bucket_list_[__chash];
+        __unique = true;
+    }
+__done:
+#if _LIBCPP_DEBUG_LEVEL >= 2
+    return pair<iterator, bool>(iterator(__ndptr, this), __unique);
+#else
+    return pair<iterator, bool>(iterator(__ndptr), __unique);
+#endif
 }
 
 #endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
