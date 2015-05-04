@@ -175,10 +175,14 @@ template<class Callable, class ...Args>
 #include <__config>
 #include <__mutex_base>
 #include <functional>
+
 #ifndef _LIBCPP_HAS_NO_VARIADICS
 #include <tuple>
 #endif
+
+#if !defined(_WIN32)
 #include <sched.h>
+#endif
 
 #include <__undef_min_max>
 
@@ -192,7 +196,11 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 class _LIBCPP_TYPE_VIS recursive_mutex
 {
+#ifndef _LIBCPP_WIN32_THREADS
     pthread_mutex_t __m_;
+#else
+    HANDLE __m_;
+#endif
 
 public:
      recursive_mutex();
@@ -207,9 +215,17 @@ public:
     bool try_lock() _NOEXCEPT;
     void unlock()  _NOEXCEPT;
 
+#ifndef _LIBCPP_WIN32_THREADS
     typedef pthread_mutex_t* native_handle_type;
+
     _LIBCPP_INLINE_VISIBILITY
     native_handle_type native_handle() {return &__m_;}
+#else
+    typedef HANDLE native_handle_type;
+
+    _LIBCPP_INLINE_VISIBILITY
+    native_handle_type native_handle() {return __m_;}
+#endif
 };
 
 class _LIBCPP_TYPE_VIS timed_mutex
@@ -260,6 +276,7 @@ class _LIBCPP_TYPE_VIS recursive_timed_mutex
     condition_variable __cv_;
     size_t             __count_;
     pthread_t          __id_;
+
 public:
      recursive_timed_mutex();
      ~recursive_timed_mutex();
@@ -287,6 +304,7 @@ recursive_timed_mutex::try_lock_until(const chrono::time_point<_Clock, _Duration
     using namespace chrono;
     pthread_t __id = pthread_self();
     unique_lock<mutex> lk(__m_);
+
     if (pthread_equal(__id, __id_))
     {
         if (__count_ == numeric_limits<size_t>::max())

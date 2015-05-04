@@ -49,6 +49,7 @@ mutex::unlock() _NOEXCEPT
 
 // recursive_mutex
 
+#ifndef _LIBCPP_WIN32_THREADS
 recursive_mutex::recursive_mutex()
 {
     pthread_mutexattr_t attr;
@@ -106,6 +107,45 @@ recursive_mutex::try_lock() _NOEXCEPT
 {
     return pthread_mutex_trylock(&__m_) == 0;
 }
+#else
+recursive_mutex::recursive_mutex()
+{
+    __m_ = CreateMutex(NULL, false, NULL);
+    if (__m_ == NULL) {
+        __throw_system_error(GetLastError(),
+                             "recursive_mutex constructor failed");
+    }
+}
+
+recursive_mutex::~recursive_mutex()
+{
+    bool result = CloseHandle(&__m_);
+    (void)result;
+    assert(result);
+}
+
+void
+recursive_mutex::lock()
+{
+    if (!WaitForSingleObject(&__m_, INFINITE)) {
+        __throw_system_error(GetLastError(), "recursive_mutex lock failed");
+    }
+}
+
+void
+recursive_mutex::unlock() _NOEXCEPT
+{
+    bool result = ReleaseMutex(&__m_);
+    (void)result;
+    assert(result);
+}
+
+bool
+recursive_mutex::try_lock() _NOEXCEPT
+{
+    return WaitForSingleObject(__m_, 0) == WAIT_OBJECT_0;
+}
+#endif
 
 // timed_mutex
 

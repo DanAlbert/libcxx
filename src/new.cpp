@@ -35,7 +35,7 @@
     #endif  // _LIBCPPABI_VERSION
 #endif
 
-#ifndef __GLIBCXX__
+#if !defined(__GLIBCXX__) && !defined(__MINGW32__)
 
 // Implement all new and delete operators as weak definitions
 // in this shared library, so that they can be overriden by programs

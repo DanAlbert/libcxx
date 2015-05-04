@@ -15,6 +15,7 @@
 #include "vector"
 #include "future"
 #include "limits"
+#include <assert.h>
 #include <sys/types.h>
 #if !defined(_WIN32)
 # if !defined(__sun__) && !defined(__linux__) && !defined(_AIX) && !defined(__native_client__) && !defined(__CloudABI__)
@@ -110,6 +111,7 @@ sleep_for(const chrono::nanoseconds& ns)
     using namespace chrono;
     if (ns > nanoseconds::zero())
     {
+#ifndef _WIN32
         seconds s = duration_cast<seconds>(ns);
         timespec ts;
         typedef decltype(ts.tv_sec) ts_sec;
@@ -127,6 +129,27 @@ sleep_for(const chrono::nanoseconds& ns)
 
         while (nanosleep(&ts, &ts) == -1 && errno == EINTR)
             ;
+#else
+        HANDLE timer = CreateWaitableTimer(NULL, true, NULL);
+        assert(timer != NULL);
+
+        // https://msdn.microsoft.com/en-us/library/windows/desktop/ms686289(v=vs.85).aspx
+        // The time after which the state of the timer is to be set to signaled,
+        // in 100 nanosecond intervals. Use the format described by the FILETIME
+        // structure. Positive values indicate absolute time. Be sure to use a
+        // UTC-based absolute time, as the system uses UTC-based time
+        // internally. Negative values indicate relative time.
+        LARGE_INTEGER due_time;
+        due_time.QuadPart = -ns.count() / 100;
+        bool result = SetWaitableTimer(timer, &due_time, 0, NULL, NULL, false);
+        assert(result);
+
+        DWORD wait_result = WaitForSingleObject(timer, INFINITE);
+        assert(wait_result == WAIT_OBJECT_0);
+
+        result = CloseHandle(timer);
+        assert(result);
+#endif
     }
 }
 

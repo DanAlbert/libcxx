@@ -91,6 +91,9 @@
 #  ifndef __MINGW32__
 #    define _LIBCPP_MSVCRT // Using Microsoft's C Runtime library
 #  endif
+#  ifndef LIBCXX_WINPTHREADS
+#    define _LIBCPP_WIN32_THREADS
+#  endif
 #endif  // _WIN32
 
 #ifdef __linux__

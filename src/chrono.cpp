@@ -11,6 +11,8 @@
 #include <sys/time.h>        //for gettimeofday and timeval
 #ifdef __APPLE__
 #include <mach/mach_time.h>  // mach_absolute_time, mach_timebase_info_data_t
+#elif defined(_WIN32)
+#include <windows.h>
 #else  /* !__APPLE__ */
 #include <cerrno>  // errno
 #include <system_error>  // __throw_system_error
@@ -106,6 +108,21 @@ steady_clock::now() _NOEXCEPT
 {
     static FP fp = init_steady_clock();
     return time_point(duration(fp()));
+}
+
+#elif defined(_WIN32)
+
+steady_clock::time_point
+steady_clock::now() _NOEXCEPT
+{
+    LARGE_INTEGER frequency;
+    QueryPerformanceFrequency(&frequency);
+
+    LARGE_INTEGER count;
+    QueryPerformanceCounter(&count);
+
+    return time_point(nanoseconds(
+        count.QuadPart * 1000000000 / frequency.QuadPart));
 }
 
 #else  // __APPLE__

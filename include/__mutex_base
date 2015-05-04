@@ -14,13 +14,34 @@
 #include <__config>
 #include <chrono>
 #include <system_error>
+
+#ifndef _LIBCPP_WIN32_THREADS
 #include <pthread.h>
+#else
+#include <support/win32/pthread.h>
+#endif
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header
 #endif
 
 _LIBCPP_BEGIN_NAMESPACE_STD
+
+template <class _To, class _Rep, class _Period>
+inline _LIBCPP_INLINE_VISIBILITY
+typename enable_if
+<
+    chrono::__is_duration<_To>::value,
+    _To
+>::type
+__ceil(chrono::duration<_Rep, _Period> __d)
+{
+    using namespace chrono;
+    _To __r = duration_cast<_To>(__d);
+    if (__r < __d)
+        ++__r;
+    return __r;
+}
 
 #ifndef _LIBCPP_HAS_NO_THREADS
 
@@ -30,11 +51,13 @@ class _LIBCPP_TYPE_VIS mutex
 
 public:
     _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR mutex() _NOEXCEPT
 #ifndef _LIBCPP_HAS_NO_CONSTEXPR
-     constexpr mutex() _NOEXCEPT : __m_(PTHREAD_MUTEX_INITIALIZER) {}
+        : __m_(PTHREAD_MUTEX_INITIALIZER) {}
 #else
-     mutex() _NOEXCEPT {__m_ = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;}
+     { __m_ = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER; }
 #endif
+
      ~mutex();
 
 private:
@@ -267,14 +290,16 @@ _LIBCPP_DECLARE_STRONG_ENUM_EPILOG(cv_status)
 class _LIBCPP_TYPE_VIS condition_variable
 {
     pthread_cond_t __cv_;
+
 public:
     _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_CONSTEXPR condition_variable() _NOEXCEPT
 #ifndef _LIBCPP_HAS_NO_CONSTEXPR
-    constexpr condition_variable() : __cv_(PTHREAD_COND_INITIALIZER) {}
+        : __cv_(PTHREAD_COND_INITIALIZER) {}
 #else
-    condition_variable() {__cv_ = (pthread_cond_t)PTHREAD_COND_INITIALIZER;}
+     { __cv_ = (pthread_cond_t)PTHREAD_COND_INITIALIZER; }
 #endif
-    ~condition_variable();
+     ~condition_variable();
 
 private:
     condition_variable(const condition_variable&); // = delete;
@@ -317,25 +342,7 @@ private:
     void __do_timed_wait(unique_lock<mutex>& __lk,
        chrono::time_point<chrono::system_clock, chrono::nanoseconds>) _NOEXCEPT;
 };
-#endif // !_LIBCPP_HAS_NO_THREADS
 
-template <class _To, class _Rep, class _Period>
-inline _LIBCPP_INLINE_VISIBILITY
-typename enable_if
-<
-    chrono::__is_duration<_To>::value,
-    _To
->::type
-__ceil(chrono::duration<_Rep, _Period> __d)
-{
-    using namespace chrono;
-    _To __r = duration_cast<_To>(__d);
-    if (__r < __d)
-        ++__r;
-    return __r;
-}
-
-#ifndef _LIBCPP_HAS_NO_THREADS
 template <class _Predicate>
 void
 condition_variable::wait(unique_lock<mutex>& __lk, _Predicate __pred)
